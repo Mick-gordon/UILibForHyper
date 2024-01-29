@@ -3359,7 +3359,7 @@ function library:CreateWindow(name, size, hidebutton)
 
 	
 
-      --[[
+      
         function tab:CreatePlayerlist(name)
             local list = { }
             list.name = name or ""
@@ -3475,13 +3475,13 @@ function library:CreateWindow(name, size, hidebutton)
             end)
             
             return list
-        end ]]
+        end
    
 
 		table.insert(window.Tabs, tab)
 		return tab
 	end
- 
+
 	return window
 end
 
