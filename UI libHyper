@@ -1,4 +1,4 @@
-
+-- insert troll face, memcorruptv2
 local library = { 
 	flags = { }, 
 	items = { } 
@@ -44,7 +44,32 @@ library.theme = {
 	itemscolor2 = Color3.fromRGB(210, 210, 210)
 }
 
+if library.theme.cursor and Drawing then
+	local success = pcall(function() 
+		library.cursor = Drawing.new("Image")
+		library.cursor.Data = game:HttpGet(library.theme.cursorimg)
+		library.cursor.Size = Vector2.new(64, 64)
+		library.cursor.Visible = uis.MouseEnabled
+		library.cursor.Rounding = 0
+		library.cursor.Position = Vector2.new(mouse.X - 32, mouse.Y + 6)
+	end)
+	if success and library.cursor then
+		uis.InputChanged:Connect(function(input)
+			if uis.MouseEnabled then
+				if input.UserInputType == Enum.UserInputType.MouseMovement then
+					library.cursor.Position = Vector2.new(input.Position.X - 32, input.Position.Y + 7)
+				end
+			end
+		end)
 
+		game:GetService("RunService").RenderStepped:Connect(function()
+			uis.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.ForceHide
+			library.cursor.Visible = uis.MouseEnabled and (uis.MouseIconEnabled or game:GetService("GuiService").MenuIsOpen)
+		end)
+	elseif not success and library.cursor then
+		library.cursor:Remove()
+	end
+end
 
 function library:CreateWatermark(name, position)
 	local gamename = marketplaceservice:GetProductInfo(game.PlaceId).Name
@@ -54,6 +79,14 @@ function library:CreateWatermark(name, position)
 
 	watermark.main = Instance.new("ScreenGui", coregui)
 	watermark.main.Name = "Watermark"
+	if syn then
+		syn.protect_gui(watermark.main)
+	end
+
+	if getgenv().watermark then
+		getgenv().watermark:Remove()
+	end
+	getgenv().watermark = watermark.main
 
 	watermark.mainbar = Instance.new("Frame", watermark.main)
 	watermark.mainbar.Name = "Main"
@@ -198,7 +231,14 @@ function library:CreateWindow(name, size, hidebutton)
 	window.Main = Instance.new("ScreenGui", coregui)
 	window.Main.Name = name
 	window.Main.DisplayOrder = 15
+	if syn then
+		syn.protect_gui(window.Main)
+	end
 
+	if getgenv().uilib then
+		getgenv().uilib:Remove()
+	end
+	getgenv().uilib = window.Main
 
 	local dragging, dragInput, dragStart, startPos
 	uis.InputChanged:Connect(function(input)
@@ -3357,10 +3397,253 @@ function library:CreateWindow(name, size, hidebutton)
 			return sector
 		end
 
+		function tab:CreateConfigSystem(side)
+			local configSystem = { }
 
-       
-        
-      
+			configSystem.configFolder = window.name .. "/" .. tostring(game.PlaceId)
+			if (not isfolder(configSystem.configFolder)) then
+				makefolder(configSystem.configFolder)
+			end
+
+			configSystem.sector = tab:CreateSector("Configs", side or "left")
+
+			local ConfigName = configSystem.sector:AddTextbox("Config Name", "", ConfigName, function() end, "")
+			local default = tostring(listfiles(configSystem.configFolder)[1] or ""):gsub(configSystem.configFolder .. "\\", ""):gsub(".txt", "")
+			local Config = configSystem.sector:AddDropdown("Configs", {}, default, false, function() end, "")
+			for i,v in pairs(listfiles(configSystem.configFolder)) do
+				if v:find(".txt") then
+					Config:Add(tostring(v):gsub(configSystem.configFolder .. "\\", ""):gsub(".txt", ""))
+				end
+			end
+
+			configSystem.Create = configSystem.sector:AddButton("Create", function()
+				for i,v in pairs(listfiles(configSystem.configFolder)) do
+					Config:Remove(tostring(v):gsub(configSystem.configFolder .. "\\", ""):gsub(".txt", ""))
+				end
+
+				if ConfigName:Get() and ConfigName:Get() ~= "" then
+					local config = {}
+
+					for i,v in pairs(library.flags) do
+						if (v ~= nil and v ~= "") then
+							if (typeof(v) == "Color3") then
+								config[i] = { v.R, v.G, v.B }
+							elseif (tostring(v):find("Enum.KeyCode")) then
+								config[i] = v.Name
+							elseif (typeof(v) == "table") then
+								config[i] = { v }
+							else
+								config[i] = v
+							end
+						end
+					end
+
+					writefile(configSystem.configFolder .. "/" .. ConfigName:Get() .. ".txt", httpservice:JSONEncode(config))
+
+					for i,v in pairs(listfiles(configSystem.configFolder)) do
+						if v:find(".txt") then
+							Config:Add(tostring(v):gsub(configSystem.configFolder .. "\\", ""):gsub(".txt", ""))
+						end
+					end
+				end
+			end)
+
+			configSystem.Save = configSystem.sector:AddButton("Save", function()
+				local config = {}
+				if Config:Get() and Config:Get() ~= "" then
+					for i,v in pairs(library.flags) do
+						if (v ~= nil and v ~= "") then
+							if (typeof(v) == "Color3") then
+								config[i] = { v.R, v.G, v.B }
+							elseif (tostring(v):find("Enum.KeyCode")) then
+								config[i] = "Enum.KeyCode." .. v.Name
+							elseif (typeof(v) == "table") then
+								config[i] = { v }
+							else
+								config[i] = v
+							end
+						end
+					end
+
+					writefile(configSystem.configFolder .. "/" .. Config:Get() .. ".txt", httpservice:JSONEncode(config))
+				end
+			end)
+
+			configSystem.Load = configSystem.sector:AddButton("Load", function()
+				local Success = pcall(readfile, configSystem.configFolder .. "/" .. Config:Get() .. ".txt")
+				if (Success) then
+					pcall(function() 
+						local ReadConfig = httpservice:JSONDecode(readfile(configSystem.configFolder .. "/" .. Config:Get() .. ".txt"))
+						local NewConfig = {}
+
+						for i,v in pairs(ReadConfig) do
+							if (typeof(v) == "table") then
+								if (typeof(v[1]) == "number") then
+									NewConfig[i] = Color3.new(v[1], v[2], v[3])
+								elseif (typeof(v[1]) == "table") then
+									NewConfig[i] = v[1]
+								end
+							elseif (tostring(v):find("Enum.KeyCode.")) then
+								NewConfig[i] = Enum.KeyCode[tostring(v):gsub("Enum.KeyCode.", "")]
+							else
+								NewConfig[i] = v
+							end
+						end
+
+						library.flags = NewConfig
+
+						for i,v in pairs(library.flags) do
+							for i2,v2 in pairs(library.items) do
+								if (i ~= nil and i ~= "" and i ~= "Configs_Name" and i ~= "Configs" and v2.flag ~= nil) then
+									if (v2.flag == i) then
+										pcall(function() 
+											v2:Set(v)
+										end)
+									end
+								end
+							end
+						end
+					end)
+				end
+			end)
+
+			configSystem.Delete = configSystem.sector:AddButton("Delete", function()
+				for i,v in pairs(listfiles(configSystem.configFolder)) do
+					Config:Remove(tostring(v):gsub(configSystem.configFolder .. "\\", ""):gsub(".txt", ""))
+				end
+
+				if (not Config:Get() or Config:Get() == "") then return end
+				if (not isfile(configSystem.configFolder .. "/" .. Config:Get() .. ".txt")) then return end
+				delfile(configSystem.configFolder .. "/" .. Config:Get() .. ".txt")
+
+				for i,v in pairs(listfiles(configSystem.configFolder)) do
+					if v:find(".txt") then
+						Config:Add(tostring(v):gsub(configSystem.configFolder .. "\\", ""):gsub(".txt", ""))
+					end
+				end
+			end)
+
+			return configSystem
+		end
+
+        --[[ not finished lol
+        function tab:CreatePlayerlist(name)
+            local list = { }
+            list.name = name or ""
+
+            list.Main = Instance.new("Frame", tab.TabPage) 
+            list.Main.Name = list.name:gsub(" ", "") .. "Sector"
+            list.Main.BorderColor3 = window.theme.outlinecolor
+            list.Main.ZIndex = 2
+            list.Main.Size = UDim2.fromOffset(window.size.X.Offset - 22, 220)
+            list.Main.BackgroundColor3 = window.theme.sectorcolor
+            list.Main.Position = UDim2.new(0, 11, 0, 12)
+
+            tab.SectorsLeft[#tab.SectorsLeft + 1] = 220
+            --tab.SectorsRight[#tab.SectorsLeft + 1].space = 220
+
+            list.Line = Instance.new("Frame", list.Main)
+            list.Line.Name = "line"
+            list.Line.ZIndex = 2
+            list.Line.Size = UDim2.fromOffset(list.Main.Size.X.Offset + 2, 1)
+            list.Line.BorderSizePixel = 0
+            list.Line.Position = UDim2.fromOffset(-1, -1)
+            list.Line.BackgroundColor3 = window.theme.accentcolor
+
+            list.BlackOutline = Instance.new("Frame", list.Main)
+            list.BlackOutline.Name = "blackline"
+            list.BlackOutline.ZIndex = 1
+            list.BlackOutline.Size = list.Main.Size + UDim2.fromOffset(4, 4)
+            list.BlackOutline.BorderSizePixel = 0
+            list.BlackOutline.BackgroundColor3 = window.theme.outlinecolor2
+            list.BlackOutline.Position = UDim2.fromOffset(-2, -2)
+
+            local size = textservice:GetTextSize(list.name, 13, window.theme.font, Vector2.new(2000, 2000))
+            list.Label = Instance.new("TextLabel", list.Main)
+            list.Label.AnchorPoint = Vector2.new(0,0.5)
+            list.Label.Position = UDim2.fromOffset(12, -1)
+            list.Label.Size = UDim2.fromOffset(math.clamp(textservice:GetTextSize(list.name, 13, window.theme.font, Vector2.new(200,300)).X + 10, 0, list.Main.Size.X.Offset), size.Y)
+            list.Label.BackgroundTransparency = 1
+            list.Label.BorderSizePixel = 0
+            list.Label.ZIndex = 4
+            list.Label.Text = list.name
+            list.Label.TextColor3 = Color3.new(1,1,2552/255)
+            list.Label.TextStrokeTransparency = 1
+            list.Label.Font = window.theme.font
+            list.Label.TextSize = 13
+
+            list.LabelBackFrame = Instance.new("Frame", list.Label)
+            list.LabelBackFrame.Name = "labelframe"
+            list.LabelBackFrame.ZIndex = 3
+            list.LabelBackFrame.Size = UDim2.fromOffset(list.Label.Size.X.Offset, 10)
+            list.LabelBackFrame.BorderSizePixel = 0
+            list.LabelBackFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            list.LabelBackFrame.Position = UDim2.fromOffset(0, 6)
+
+            list.Items = Instance.new("ScrollingFrame", list.Main) 
+            list.Items.Name = "items"
+            list.Items.ZIndex = 2
+            list.Items.ScrollBarThickness = 1
+            list.Items.BackgroundTransparency = 1
+            list.Items.Size = list.Main.Size - UDim2.fromOffset(10, 15)
+            list.Items.ScrollingDirection = "Y"
+            list.Items.BorderSizePixel = 0
+            list.Items.Position = UDim2.fromOffset(5, 10)
+            list.Items.CanvasSize = list.Items.Size
+
+            list.ListLayout = Instance.new("UIListLayout", list.Items)
+            list.ListLayout.FillDirection = Enum.FillDirection.Vertical
+            list.ListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+            list.ListLayout.Padding = UDim.new(0, 0)
+
+            list.ListPadding = Instance.new("UIPadding", list.Items)
+            list.ListPadding.PaddingTop = UDim.new(0, 2)
+            list.ListPadding.PaddingLeft = UDim.new(0, 6)
+            list.ListPadding.PaddingRight = UDim.new(0, 6)
+
+            list.items = { }
+            function list:AddPlayer(Player)
+                local player = { }
+
+                player.Main = Instance.new("Frame", list.Items)
+                player.Main.Name = Player.Name
+                player.Main.BorderColor3 = window.theme.outlinecolor
+                player.Main.ZIndex = 3
+                player.Main.Size = UDim2.fromOffset(list.Items.AbsoluteSize.X - 12, 20)
+                player.Main.BackgroundColor3 = window.theme.sectorcolor
+                player.Main.Position = UDim2.new(0, 0, 0, 0)
+
+                table.insert(list.items, Player)
+                list.Items.CanvasSize = UDim2.fromOffset(list.Items.AbsoluteSize.X, (#list.items * 20))
+                list.Items.Size = UDim2.fromOffset(list.Items.AbsoluteSize.X, math.clamp(list.Items.CanvasSize.Y.Offset, 0, 205))
+                return player
+            end
+
+            function list:RemovePlayer(Player)
+                local p = list.Items:FindFirstChild(Player)
+                if p then
+                    for i,v in pairs(list.items) do
+                        if v == Player then
+                            table.remove(list.items, i)
+                        end
+                    end
+
+                    p:Remove()
+                    list.Items.CanvasSize = UDim2.fromOffset(list.Items.AbsoluteSize.X, (#list.items * 90))
+                end
+            end
+
+            for i,v in pairs(game:GetService("Players"):GetPlayers()) do
+                list:AddPlayer(v)
+            end
+            
+            game:GetService("Players").PlayerAdded:Connect(function(v)
+                list:AddPlayer(v)
+            end)
+            
+            return list
+        end
+        ]]--
 
 		table.insert(window.Tabs, tab)
 		return tab
